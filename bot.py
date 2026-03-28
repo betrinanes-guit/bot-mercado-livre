@@ -1,12 +1,15 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 import time
 import json
-import os
+
+TOKEN = os.getenv("8282034895:AAFBtrnwQYhZzVSA_qAH43eYuLCxLU1aTn8")
+CHAT_ID = os.getenv("233452068")
 
 # 🔐 CONFIGURAÇÃO
-TOKEN = "8282034895:AAFBtrnwQYhZzVSA_qAH43eYuLCxLU1aTn8"
-CHAT_ID = "233452068"
+# TOKEN = "8282034895:AAFBtrnwQYhZzVSA_qAH43eYuLCxLU1aTn8"
+# CHAT_ID = "233452068"
 
 buscas = [
     "hot wheels super treasure hunt",
