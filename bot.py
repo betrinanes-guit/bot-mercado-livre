@@ -4,12 +4,8 @@ from bs4 import BeautifulSoup
 import time
 import json
 
-TOKEN = os.getenv("8282034895:AAFBtrnwQYhZzVSA_qAH43eYuLCxLU1aTn8")
-CHAT_ID = os.getenv("233452068")
-
-# 🔐 CONFIGURAÇÃO
-# TOKEN = "8282034895:AAFBtrnwQYhZzVSA_qAH43eYuLCxLU1aTn8"
-# CHAT_ID = "233452068"
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 buscas = [
     "hot wheels super treasure hunt",
@@ -26,19 +22,28 @@ headers = {
 
 # 📦 HISTÓRICO
 if os.path.exists(ARQUIVO):
-    with open(ARQUIVO, "r") as f:
+    with open(ARQUIVO, "r", encoding="utf-8") as f:
         historico = json.load(f)
 else:
     historico = {}
 
 def salvar():
-    with open(ARQUIVO, "w") as f:
-        json.dump(historico, f)
+    with open(ARQUIVO, "w", encoding="utf-8") as f:
+        json.dump(historico, f, ensure_ascii=False, indent=2)
 
 def enviar_telegram(msg):
+    if not TOKEN or not CHAT_ID:
+        print("❌ TOKEN ou CHAT_ID não configurados.")
+        return
+
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+        resposta = requests.post(
+            url,
+            data={"chat_id": CHAT_ID, "text": msg},
+            timeout=30
+        )
+        print(f"📨 Telegram status: {resposta.status_code}")
     except Exception as e:
         print("Erro ao enviar:", e)
 
@@ -72,14 +77,13 @@ def buscar():
         url = f"https://lista.mercadolivre.com.br/{termo.replace(' ', '-')}"
 
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=30)
 
             if response.status_code != 200:
                 print("Erro:", response.status_code)
                 continue
 
             soup = BeautifulSoup(response.text, "lxml")
-
             itens = soup.find_all("li", class_="ui-search-layout__item")
 
             print(f"Encontrados: {len(itens)} itens")
@@ -94,18 +98,15 @@ def buscar():
                 titulo = titulo_tag.text.strip()
                 preco = int(preco_tag.text.replace(".", ""))
                 link = titulo_tag["href"].split("#")[0]
-
                 item_id = link.split("?")[0]
 
-                # 🚫 lixo
                 if lixo(titulo):
                     continue
 
                 tipo = classificar(titulo)
-
                 preco_antigo = historico.get(item_id)
 
-                # 🚨 PROMOÇÃO (queda de preço)
+                # 🚨 PROMOÇÃO
                 if preco_antigo:
                     queda = preco_antigo - preco
 
@@ -125,7 +126,7 @@ def buscar():
                             print("🚨 Promoção:", titulo)
                             enviar_telegram(msg)
 
-                # 🎯 SNIPER (só MUITO barato)
+                # 🎯 SNIPER
                 enviar = False
                 tag = ""
 
@@ -141,8 +142,7 @@ def buscar():
                     enviar = True
                     tag = "💎 PREMIUM (Preço Bom)"
 
-                # 🚫 só envia se for MUITO barato
-                if enviar and preco <= 100:
+                if enviar:
                     msg = f"""{tag}
 
 🚗 {titulo}
@@ -153,7 +153,6 @@ def buscar():
                     print("🔥 Sniper:", titulo)
                     enviar_telegram(msg)
 
-                # 💾 salva histórico
                 historico[item_id] = preco
 
         except Exception as e:
@@ -161,7 +160,6 @@ def buscar():
 
     salvar()
 
-# 🔁 LOOP
 while True:
     buscar()
     print("⏳ Aguardando 10 minutos...\n")
