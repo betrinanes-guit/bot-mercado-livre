@@ -1,8 +1,8 @@
 import os
+import json
+import time
 import requests
 from bs4 import BeautifulSoup
-import time
-import json
 
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -17,7 +17,8 @@ buscas = [
 ARQUIVO = "precos.json"
 
 headers = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
 # 📦 HISTÓRICO
@@ -27,9 +28,11 @@ if os.path.exists(ARQUIVO):
 else:
     historico = {}
 
+
 def salvar():
     with open(ARQUIVO, "w", encoding="utf-8") as f:
         json.dump(historico, f, ensure_ascii=False, indent=2)
+
 
 def enviar_telegram(msg):
     if not TOKEN or not CHAT_ID:
@@ -37,6 +40,7 @@ def enviar_telegram(msg):
         return
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
     try:
         resposta = requests.post(
             url,
@@ -46,6 +50,7 @@ def enviar_telegram(msg):
         print(f"📨 Telegram status: {resposta.status_code}")
     except Exception as e:
         print("Erro ao enviar:", e)
+
 
 # 🧠 CLASSIFICAÇÃO
 def classificar(titulo):
@@ -58,6 +63,7 @@ def classificar(titulo):
     else:
         return "comum"
 
+
 # 🚫 FILTRO DE LIXO
 def lixo(titulo):
     t = titulo.lower()
@@ -69,6 +75,7 @@ def lixo(titulo):
     ]
     return any(p in t for p in bloqueados)
 
+
 # 🔎 BUSCA
 def buscar():
     for termo in buscas:
@@ -79,26 +86,59 @@ def buscar():
         try:
             response = requests.get(url, headers=headers, timeout=30)
 
+            print("Status:", response.status_code)
+            print("URL final:", response.url)
+
             if response.status_code != 200:
                 print("Erro:", response.status_code)
                 continue
 
             soup = BeautifulSoup(response.text, "lxml")
-            itens = soup.find_all("li", class_="ui-search-layout__item")
+
+            itens = soup.select("li.ui-search-layout__item")
+            if not itens:
+                itens = soup.select("ol.ui-search-layout li")
+            if not itens:
+                itens = soup.select("div.ui-search-result__wrapper")
 
             print(f"Encontrados: {len(itens)} itens")
 
+            if len(itens) == 0:
+                print("Título da página:", soup.title.string if soup.title else "Sem título")
+                print("Trecho HTML:", response.text[:500])
+                continue
+
             for item in itens:
-                titulo_tag = item.find("a", class_="poly-component__title")
-                preco_tag = item.find("span", class_="andes-money-amount__fraction")
+                titulo_tag = (
+                    item.select_one("a.poly-component__title")
+                    or item.select_one("a.ui-search-item__group__element")
+                    or item.select_one("h2 a")
+                )
+
+                preco_tag = (
+                    item.select_one("span.andes-money-amount__fraction")
+                    or item.select_one(".price-tag-fraction")
+                )
 
                 if not titulo_tag or not preco_tag:
                     continue
 
-                titulo = titulo_tag.text.strip()
-                preco = int(preco_tag.text.replace(".", ""))
-                link = titulo_tag["href"].split("#")[0]
+                titulo = titulo_tag.get_text(strip=True)
+
+                try:
+                    preco = int(
+                        preco_tag.get_text(strip=True)
+                        .replace(".", "")
+                        .replace(",", "")
+                    )
+                except ValueError:
+                    continue
+
+                link = titulo_tag.get("href", "").split("#")[0]
                 item_id = link.split("?")[0]
+
+                if not link:
+                    continue
 
                 if lixo(titulo):
                     continue
@@ -160,7 +200,10 @@ def buscar():
 
     salvar()
 
-while True:
-    buscar()
-    print("⏳ Aguardando 10 minutos...\n")
-    time.sleep(600)
+
+if __name__ == "__main__":
+    print("🚀 Bot iniciado")
+    while True:
+        buscar()
+        print("⏳ Aguardando 10 minutos...\n")
+        time.sleep(600)
